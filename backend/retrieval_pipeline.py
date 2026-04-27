@@ -76,40 +76,17 @@ class OpenRouterEmbedder:
         """
         Initialize the embedder.
         
-        TODO:
-        1. Store the api_key: self.api_key = api_key
-        2. Store the model: self.model = model
-        3. Store the base URL: self.base_url = "https://openrouter.ai/api/v1"
-        
         Args:
             api_key: OpenRouter API key
             model: Embedding model to use
         """
-        pass
+        self.api_key = api_key
+        self.model = model
+        self.base_url = "https://openrouter.ai/api/v1"
     
     def embed_query(self, text: str) -> np.ndarray:
         """
         Generate embedding for a single query.
-        
-        TODO:
-        1. Build headers dict:
-           - "Authorization": f"Bearer {self.api_key}"
-           - "Content-Type": "application/json"
-        
-        2. Build payload dict:
-           - "model": self.model
-           - "input": text
-        
-        3. Make POST request to f"{self.base_url}/embeddings"
-        
-        4. Check response status code, raise error if not 200
-        
-        5. Parse response JSON
-        
-        6. Extract embedding: embedding = response_data["data"][0]["embedding"]
-        
-        7. Convert to numpy array and return:
-           return np.array(embedding, dtype=np.float32)
         
         Args:
             text: Query text to embed
@@ -117,7 +94,30 @@ class OpenRouterEmbedder:
         Returns:
             Embedding vector as numpy array
         """
-        pass
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model,
+            "input": text
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/embeddings",
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Embedding API error: {response.status_code} - {response.text}")
+        
+        response_data = response.json()
+        embedding = response_data["data"][0]["embedding"]
+        
+        return np.array(embedding, dtype=np.float32)
 
 
 class BM25Index:
@@ -131,33 +131,17 @@ class BM25Index:
         """
         Build BM25 index from chunks.
         
-        TODO:
-        1. Store the chunks: self.chunks = chunks
-        
-        2. Create a lookup dict for quick access by chunk_id:
-           self.chunk_id_to_idx = {c["chunk_id"]: i for i, c in enumerate(chunks)}
-        
-        3. Tokenize all documents (convert each chunk's text to list of words):
-           self.tokenized_docs = [self._tokenize(c["text"]) for c in chunks]
-        
-        4. Create the BM25 index:
-           self.bm25 = BM25Okapi(self.tokenized_docs)
-        
         Args:
             chunks: List of chunk dictionaries from chunks.json
         """
-        pass
+        self.chunks = chunks
+        self.chunk_id_to_idx = {c["chunk_id"]: i for i, c in enumerate(chunks)}
+        self.tokenized_docs = [self._tokenize(c["text"]) for c in chunks]
+        self.bm25 = BM25Okapi(self.tokenized_docs)
     
     def _tokenize(self, text: str) -> list[str]:
         """
         Simple tokenization: lowercase and extract alphanumeric words.
-        
-        TODO:
-        1. Convert text to lowercase
-        
-        2. Use regex to find all words (alphanumeric sequences)
-        
-        3. Return the list of tokens
         
         Args:
             text: Text to tokenize
@@ -165,22 +149,13 @@ class BM25Index:
         Returns:
             List of lowercase word tokens
         """
-        pass
+        text_lower = text.lower()
+        tokens = re.findall(r'\w+', text_lower)
+        return tokens
     
     def search(self, query: str, top_k: int = 50) -> list[tuple[int, float]]:
         """
         Search for query and return top-k results.
-        
-        TODO:
-        1. Tokenize the query
-        
-        2. Get BM25 scores for all documents
-        
-        3. Get indices of top-k highest scores (hint: use np.argsort)
-        
-        4. Build result list with only non-zero scores (hint: use list comprehension)
-           
-        5. Return results
         
         Args:
             query: Search query string
@@ -189,7 +164,16 @@ class BM25Index:
         Returns:
             List of (chunk_index, score) tuples, sorted by score descending
         """
-        pass
+        query_tokens = self._tokenize(query)
+        scores = self.bm25.get_scores(query_tokens)
+        
+        # Get indices of top-k highest scores
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        
+        # Build result list with only non-zero scores
+        results = [(int(idx), float(scores[idx])) for idx in top_indices if scores[idx] > 0]
+        
+        return results
 
 
 class RetrievalPipeline:
@@ -202,65 +186,59 @@ class RetrievalPipeline:
         """
         Initialize all components of the retrieval pipeline.
         
-        TODO:
-        1. If config is None, create one from environment variables:
-           config = RetrievalPipelineConfig(
-               qdrant_url=os.getenv("QDRANT_URL"),
-               qdrant_api_key=os.getenv("QDRANT_API_KEY"),
-               openrouter_api_key=os.getenv("OPENROUTER_API_KEY"),
-               cohere_api_key=os.getenv("COHERE_API_KEY"),
-               chunks_path=os.getenv("CHUNKS_PATH", "./chunks.json"),
-           )
-        
-        2. Validate required fields - raise ValueError if missing:
-           - config.qdrant_url
-           - config.qdrant_api_key
-           - config.openrouter_api_key
-        
-        3. Initialize Qdrant client:
-        
-        4. Initialize the embedder:
-           
-        5. Load chunks from JSON file:
-        
-        6. Build BM25 index:
-           self.bm25_index = BM25Index(self.chunks)
-           print("BM25 index built")
-        
-        7. Store the config:
-           self.config = config
-        
         Args:
             config: Optional configuration. If None, loads from environment variables.
         """
-        pass
+        # 1. Create config from environment if not provided
+        if config is None:
+            config = RetrievalPipelineConfig(
+                qdrant_url=os.getenv("QDRANT_URL"),
+                qdrant_api_key=os.getenv("QDRANT_API_KEY"),
+                openrouter_api_key=os.getenv("OPENROUTER_API_KEY"),
+                cohere_api_key=os.getenv("COHERE_API_KEY"),
+                chunks_path=os.getenv("CHUNKS_PATH", "./chunks.json"),
+            )
+        
+        # 2. Validate required fields
+        if not config.qdrant_url:
+            raise ValueError("QDRANT_URL is required")
+        if not config.qdrant_api_key:
+            raise ValueError("QDRANT_API_KEY is required")
+        if not config.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY is required")
+        
+        # 3. Initialize Qdrant client
+        self.qdrant = QdrantClient(
+            url=config.qdrant_url,
+            api_key=config.qdrant_api_key,
+            timeout=120
+        )
+        print(f"Connected to Qdrant at {config.qdrant_url}")
+        
+        # 4. Initialize the embedder
+        self.embedder = OpenRouterEmbedder(
+            api_key=config.openrouter_api_key,
+            model=config.embedding_model
+        )
+        print(f"Embedder initialized with model: {config.embedding_model}")
+        
+        # 5. Load chunks from JSON file
+        with open(config.chunks_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        self.chunks = data["chunks"]
+        print(f"Loaded {len(self.chunks)} chunks from {config.chunks_path}")
+        
+        # 6. Build BM25 index
+        self.bm25_index = BM25Index(self.chunks)
+        print("BM25 index built")
+        
+        # 7. Store the config
+        self.config = config
     
     def semantic_search(self, query: str, top_k: int = 30) -> list[dict]:
         """
         Perform semantic search using Qdrant.
         
-        TODO:
-        1. Embed the query:
-           query_embedding = self.embedder.embed_query(query)
-        
-        2. Search Qdrant:
-           results = self.qdrant.query_points(
-               collection_name=COLLECTION_NAME,
-               query=query_embedding.tolist(),
-               limit=top_k,
-               with_payload=True
-           ).points
-        
-        3. Convert to list of dicts:
-           return [
-               {
-                   "chunk_id": r.payload["chunk_id"],
-                   "score": r.score,
-                   "payload": r.payload
-               }
-               for r in results
-           ]
-        
         Args:
             query: Search query
             top_k: Number of results to return
@@ -268,26 +246,28 @@ class RetrievalPipeline:
         Returns:
             List of result dicts with chunk_id, score, and payload
         """
-        pass
+        query_embedding = self.embedder.embed_query(query)
+        
+        results = self.qdrant.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_embedding.tolist(),
+            limit=top_k,
+            with_payload=True
+        ).points
+        
+        return [
+            {
+                "chunk_id": r.payload["chunk_id"],
+                "score": r.score,
+                "payload": r.payload
+            }
+            for r in results
+        ]
     
     def bm25_search(self, query: str, top_k: int = 30) -> list[dict]:
         """
         Perform BM25 keyword search.
         
-        TODO:
-        1. Call BM25 search:
-           results = self.bm25_index.search(query, top_k)
-        
-        2. Convert to list of dicts (same format as semantic_search):
-           return [
-               {
-                   "chunk_id": self.chunks[idx]["chunk_id"],
-                   "score": score,
-                   "payload": self.chunks[idx]
-               }
-               for idx, score in results
-           ]
-        
         Args:
             query: Search query
             top_k: Number of results to return
@@ -295,42 +275,20 @@ class RetrievalPipeline:
         Returns:
             List of result dicts with chunk_id, score, and payload
         """
-        pass
+        results = self.bm25_index.search(query, top_k)
+        
+        return [
+            {
+                "chunk_id": self.chunks[idx]["chunk_id"],
+                "score": score,
+                "payload": self.chunks[idx]
+            }
+            for idx, score in results
+        ]
     
     def hybrid_search(self, query: str, semantic_top_k: int = 30, bm25_top_k: int = 30) -> list[dict]:
         """
         Combine semantic and BM25 results using weighted scoring.
-        
-        TODO:
-        1. Get results from both search methods:
-           semantic_results = self.semantic_search(query, semantic_top_k)
-           bm25_results = self.bm25_search(query, bm25_top_k)
-        
-        2. Normalize semantic scores (divide by max score):
-           if semantic_results:
-               max_semantic = max(r["score"] for r in semantic_results)
-               for r in semantic_results:
-                   r["normalized_score"] = r["score"] / max_semantic if max_semantic > 0 else 0
-        
-        3. Normalize BM25 scores the same way
-        
-        4. Combine results into a single dict keyed by chunk_id:
-           combined = {}
-           
-           For semantic results:
-           - Add to combined with semantic_score and initial combined_score
-           
-           For BM25 results:
-           - If chunk_id already in combined, add bm25_score and update combined_score
-           - If new, add with just bm25_score
-           
-           Combined score formula:
-           combined_score = (semantic_weight * semantic_score) + (bm25_weight * bm25_score)
-        
-        5. Sort by combined_score descending:
-           results = sorted(combined.values(), key=lambda x: x["combined_score"], reverse=True)
-        
-        6. Return the sorted list
         
         Args:
             query: Search query
@@ -340,36 +298,62 @@ class RetrievalPipeline:
         Returns:
             Combined and sorted list of results
         """
-        pass
+        # 1. Get results from both search methods
+        semantic_results = self.semantic_search(query, semantic_top_k)
+        bm25_results = self.bm25_search(query, bm25_top_k)
+        
+        # 2. Normalize semantic scores
+        if semantic_results:
+            max_semantic = max(r["score"] for r in semantic_results)
+            for r in semantic_results:
+                r["normalized_score"] = r["score"] / max_semantic if max_semantic > 0 else 0
+        
+        # 3. Normalize BM25 scores
+        if bm25_results:
+            max_bm25 = max(r["score"] for r in bm25_results)
+            for r in bm25_results:
+                r["normalized_score"] = r["score"] / max_bm25 if max_bm25 > 0 else 0
+        
+        # 4. Combine results
+        combined = {}
+        
+        # Add semantic results
+        for r in semantic_results:
+            chunk_id = r["chunk_id"]
+            combined[chunk_id] = {
+                "chunk_id": chunk_id,
+                "payload": r["payload"],
+                "semantic_score": r["normalized_score"],
+                "bm25_score": 0,
+                "combined_score": self.config.semantic_weight * r["normalized_score"]
+            }
+        
+        # Add/merge BM25 results
+        for r in bm25_results:
+            chunk_id = r["chunk_id"]
+            if chunk_id in combined:
+                combined[chunk_id]["bm25_score"] = r["normalized_score"]
+                combined[chunk_id]["combined_score"] = (
+                    self.config.semantic_weight * combined[chunk_id]["semantic_score"] +
+                    self.config.bm25_weight * r["normalized_score"]
+                )
+            else:
+                combined[chunk_id] = {
+                    "chunk_id": chunk_id,
+                    "payload": r["payload"],
+                    "semantic_score": 0,
+                    "bm25_score": r["normalized_score"],
+                    "combined_score": self.config.bm25_weight * r["normalized_score"]
+                }
+        
+        # 5. Sort by combined_score descending
+        results = sorted(combined.values(), key=lambda x: x["combined_score"], reverse=True)
+        
+        return results
     
     def rerank(self, query: str, results: list[dict], top_k: int = 10) -> list[dict]:
         """
         Rerank results using Cohere API (optional but improves quality).
-        
-        TODO:
-        1. If no Cohere API key or no results, return results[:top_k]
-        
-        2. Extract texts for reranking:
-           texts = [r["payload"]["text"] for r in results]
-        
-        3. Call Cohere Rerank API:
-           - URL: "https://api.cohere.ai/v1/rerank"
-           - Headers: {"Authorization": f"Bearer {self.config.cohere_api_key}"}
-           - Body: {
-               "model": "rerank-english-v3.0",
-               "query": query,
-               "documents": texts,
-               "top_n": top_k
-           }
-        
-        4. Parse response and reorder results based on Cohere's ranking:
-           - response.results contains items with index and relevance_score
-           - Reorder your results list to match Cohere's order
-           - Update each result's score with the rerank_score
-        
-        5. Return reranked results
-        
-        Note: If Cohere API fails, catch the error and fall back to returning results[:top_k]
         
         Args:
             query: Original query
@@ -379,53 +363,99 @@ class RetrievalPipeline:
         Returns:
             Reranked list of results
         """
-        pass
+        # 1. If no Cohere API key or no results, return results[:top_k]
+        if not self.config.cohere_api_key or not results:
+            return results[:top_k]
+        
+        try:
+            # 2. Extract texts for reranking
+            texts = [r["payload"]["text"] for r in results]
+            
+            # 3. Call Cohere Rerank API
+            headers = {
+                "Authorization": f"Bearer {self.config.cohere_api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "rerank-english-v3.0",
+                "query": query,
+                "documents": texts,
+                "top_n": top_k
+            }
+            
+            response = requests.post(
+                "https://api.cohere.ai/v1/rerank",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            
+            if response.status_code != 200:
+                print(f"Cohere rerank failed: {response.status_code} - {response.text}")
+                return results[:top_k]
+            
+            # 4. Parse response and reorder results
+            rerank_response = response.json()
+            reranked = []
+            
+            for item in rerank_response["results"]:
+                idx = item["index"]
+                result = results[idx].copy()
+                result["rerank_score"] = item["relevance_score"]
+                reranked.append(result)
+            
+            return reranked
+            
+        except Exception as e:
+            print(f"Reranking failed: {e}")
+            return results[:top_k]
     
-    def retrieve(self, query: str, top_k: int = 8) -> list[RetrievalResult]:
+    def retrieve(self, query: str, top_k: int = 8, use_hybrid: bool = True, use_reranker: bool = None) -> list[RetrievalResult]:
         """
         Full retrieval pipeline - THIS IS WHAT api_server.py CALLS!
-        
-        TODO:
-        1. Run hybrid search to get candidates:
-           candidates = self.hybrid_search(query)
-        
-        2. Rerank if enabled:
-           if self.config.use_reranker:
-               reranked = self.rerank(query, candidates, top_k=min(top_k * 2, len(candidates)))
-           else:
-               reranked = candidates
-        
-        3. Take top_k results:
-           final = reranked[:top_k]
-        
-        4. Convert to RetrievalResult objects:
-           return [
-               RetrievalResult(
-                   chunk_id=r["payload"]["chunk_id"],
-                   paper_id=r["payload"]["paper_id"],
-                   title=r["payload"]["title"],
-                   authors=r["payload"]["authors"],
-                   text=r["payload"]["text"],
-                   score=r.get("rerank_score", r.get("combined_score", r.get("score", 0))),
-                   chunk_type=r["payload"].get("chunk_type", ""),
-                   chunk_section=r["payload"].get("chunk_section", ""),
-                   pdf_url=r["payload"].get("pdf_url"),
-                   github_link=r["payload"].get("github_link"),
-                   video_link=r["payload"].get("video_link"),
-                   acm_url=r["payload"].get("acm_url"),
-                   abstract_url=r["payload"].get("abstract_url"),
-               )
-               for r in final
-           ]
         
         Args:
             query: User's search query
             top_k: Number of results to return
+            use_hybrid: Whether to use hybrid search (default True)
+            use_reranker: Whether to use reranker (default from config)
             
         Returns:
             List of RetrievalResult objects ready for RAG generation
         """
-        pass
+        # 1. Run hybrid search to get candidates
+        candidates = self.hybrid_search(query)
+        
+        # 2. Rerank if enabled
+        should_rerank = use_reranker if use_reranker is not None else self.config.use_reranker
+        if should_rerank:
+            reranked = self.rerank(query, candidates, top_k=min(top_k * 2, len(candidates)))
+        else:
+            reranked = candidates
+        
+        # 3. Take top_k results
+        final = reranked[:top_k]
+        
+        # 4. Convert to RetrievalResult objects
+        return [
+            RetrievalResult(
+                chunk_id=r["payload"]["chunk_id"],
+                paper_id=r["payload"]["paper_id"],
+                title=r["payload"]["title"],
+                authors=r["payload"]["authors"],
+                text=r["payload"]["text"],
+                score=r.get("rerank_score", r.get("combined_score", r.get("score", 0))),
+                chunk_type=r["payload"].get("chunk_type", ""),
+                chunk_section=r["payload"].get("chunk_section", ""),
+                pdf_url=r["payload"].get("pdf_url"),
+                github_link=r["payload"].get("github_link"),
+                video_link=r["payload"].get("video_link"),
+                acm_url=r["payload"].get("acm_url"),
+                abstract_url=r["payload"].get("abstract_url"),
+            )
+            for r in final
+        ]
 
 
 # For testing this file directly
